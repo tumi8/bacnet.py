@@ -149,7 +149,7 @@ class Response:
             prop_id, val, curr_byte = self.parse_tag_content(data_bin, curr_byte)
 
             # Object ID
-            if prop_id == self.PROP_ID_OBJECT_ID:
+            if prop_id == self.PROP_ID_OBJECT_ID and val:
                 self.object_type = (val & 0xffc00000) >> 22
                 self.instance = val & 0x003fffff
             elif prop_id is not None:
@@ -159,6 +159,9 @@ class Response:
     def parse_tag(self, data_bin, curr_byte):
         tag = Tag(data_bin, curr_byte)
         curr_byte += 1
+
+        if not hasattr(tag, "context_spec"):
+            return (None, curr_byte)
 
         # Check for extended data length
         if not tag.context_spec:
@@ -186,12 +189,15 @@ class Response:
         tag, curr_byte = self.parse_tag(data_bin, curr_byte)
 
         # Skip opening and closing tags
-        while tag.context_spec and (tag.len_val_type == self.TAG_NUM_OPENING or tag.len_val_type == self.TAG_NUM_CLOSING):
+        while tag and tag.context_spec and (tag.len_val_type == self.TAG_NUM_OPENING or tag.len_val_type == self.TAG_NUM_CLOSING):
             if curr_byte >= self.bvlc_len:
                 return None, None, curr_byte
             if tag.number == self.TAG_NUM_ERROR:
                 error = True
             tag, curr_byte = self.parse_tag(data_bin, curr_byte)
+
+        if not tag:
+            return (None, None, curr_byte)
 
         # Object ID
         if tag.context_spec and tag.number == self.TAG_NUM_OBJECT_ID:
@@ -259,6 +265,9 @@ class Response:
             print("WARN: Not implemented char string encoding: " + str(data_bin[curr_byte]))
 
     def parse_uint(self, data_bin, curr_byte, length):
+        if length > len(data_bin[curr_byte:]):
+            print("WARN: Expecting uint of length " + str(length) + " but have only " + str(len(data_bin[curr_byte:])) + " of payload left")
+            return
         if length == 1:
             return data_bin[curr_byte]
         elif length == 2:
@@ -323,6 +332,11 @@ class Tag:
     """
 
     def __init__(self, data_bin, curr_byte):
+
+        if curr_byte >= len(data_bin):
+            print("WARN: Wanted to initialize tag after end of payload")
+            return None
+
         self.number = data_bin[curr_byte] >> 4
         self.context_spec = (data_bin[curr_byte] & 0x08) >> 3
         self.len_val_type = data_bin[curr_byte] & 0x07
