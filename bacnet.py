@@ -50,11 +50,11 @@ class Response:
         self.npdu_version = None      # 0x01
         self.npdu_ctrl = None
 
-        self.ndpu_dnet = None
+        self.npdu_dnet = None
         self.npdu_dlen = None
         self.npdu_dadr = None
 
-        self.ndpu_snet = None
+        self.npdu_snet = None
         self.npdu_slen = None
         self.npdu_sadr = None
 
