@@ -96,7 +96,7 @@ class Response:
             self.npdu_dlen = data_bin[curr_byte+2]
             # Check for valid MAC destination address length
             if self.npdu_dlen in [1, 2, 3, 6, 7]:
-                self.npdu_dadr = self.parse_uint(data_bin, curr_byte+3, self.npdu_dlen)
+                self.npdu_dadr = self.parse_adr(data_bin, curr_byte+3, self.npdu_dlen)
 
             curr_byte += 2+1+self.npdu_dlen
 
@@ -107,7 +107,7 @@ class Response:
             self.npdu_slen = data_bin[curr_byte+2]
             # Check for valid MAC source address length
             if self.npdu_slen in [1, 2, 3, 6]:
-                self.npdu_sadr = self.parse_uint(data_bin, curr_byte+3, self.npdu_slen)
+                self.npdu_sadr = self.parse_adr(data_bin, curr_byte+3, self.npdu_slen)
 
             curr_byte += 2+1+self.npdu_slen
 
@@ -243,6 +243,11 @@ class Response:
 
         return (prop_id, prop_content, curr_byte)
 
+    def parse_adr(self, data_bin, curr_byte, length):
+        if length == 6 and len(data_bin[curr_byte:]) >= 6:
+            return "%02x:%02x:%02x:%02x:%02x:%02x" % struct.unpack("BBBBBB", data_bin[curr_byte:curr_byte+6])
+        else:
+            return self.parse_uint(data_bin, curr_byte, length)
 
     def parse_date(self, data_bin, curr_byte):
         return datetime.date(1900 + data_bin[curr_byte], data_bin[curr_byte+1], data_bin[curr_byte+2])
