@@ -143,17 +143,26 @@ class Response:
         curr_byte += 3
 
         self.properties = dict()
+        open_tag_prop_id = None
 
         # Read all tags and their content
         while curr_byte < self.bvlc_len:
-            prop_id, val, curr_byte = self.parse_tag_content(data_bin, curr_byte)
+            prop_id, val, curr_byte, open_tag_prop_id = self.parse_tag_content(data_bin, curr_byte, open_tag_prop_id, open_tag_prop_id is not None)
 
             # Object ID
             if prop_id == self.PROP_ID_OBJECT_ID and val:
                 self.object_type = (val & 0xffc00000) >> 22
                 self.instance = val & 0x003fffff
             elif prop_id is not None:
-                self.properties[prop_id] = val
+                # Element with this property ID is already present -> create list
+                if prop_id in self.properties:
+                    temp = self.properties[prop_id]
+                    if not type(temp) is list:
+                        self.properties[prop_id] = list()
+                        self.properties[prop_id].append(temp)
+                    self.properties[prop_id].append(val)
+                else:
+                    self.properties[prop_id] = val
 
     # Returns the parsed tag and the updated curr_byte
     def parse_tag(self, data_bin, curr_byte):
@@ -180,7 +189,12 @@ class Response:
 
 
     # Returns (property ID, value, curr_byte)
-    def parse_tag_content(self, data_bin, curr_byte, prop_id=None):
+    def parse_tag_content(self, data_bin, curr_byte, prop_id=None, tag_is_open=False):
+
+        if tag_is_open:
+            tag_open_prop_id = prop_id
+        else:
+            tag_open_prop_id = None
 
         error = False
 
@@ -190,14 +204,21 @@ class Response:
 
         # Skip opening and closing tags
         while tag and tag.context_spec and (tag.len_val_type == self.TAG_NUM_OPENING or tag.len_val_type == self.TAG_NUM_CLOSING):
+            # All tags belong to same property ID if enclosed within open/close tag
+            if prop_id:
+                if tag.len_val_type == self.TAG_NUM_OPENING:
+                    tag_open_prop_id = prop_id
+                elif tag.len_val_type == self.TAG_NUM_CLOSING:
+                    tag_open_prop_id = None
+
             if curr_byte >= self.bvlc_len:
-                return None, None, curr_byte
+                return (None, None, curr_byte, None)
             if tag.number == self.TAG_NUM_ERROR:
                 error = True
             tag, curr_byte = self.parse_tag(data_bin, curr_byte)
 
         if not tag:
-            return (None, None, curr_byte)
+            return (None, None, curr_byte, None)
 
         # Object ID
         if tag.context_spec and tag.number == self.TAG_NUM_OBJECT_ID:
@@ -210,11 +231,11 @@ class Response:
 
         # Tag for property information
         elif tag.context_spec:
-            if tag.len_val_type != 1:
+            if tag.len_val_type < 1 or tag.len_val_type > 4:
                 print("WARN: Tag length/value/type with length " + str(tag.len_val_type) + " found: " + str(tag))
             else:
-                prop_id = data_bin[curr_byte]
-                return self.parse_tag_content(data_bin, curr_byte+1, prop_id)
+                prop_id = self.parse_uint(data_bin, curr_byte, tag.len_val_type)
+                return self.parse_tag_content(data_bin, curr_byte+tag.len_val_type, prop_id)
 
         # Application specific tag = content
         elif not tag.context_spec:
@@ -233,6 +254,8 @@ class Response:
                     prop_content, curr_byte = self.parse_error(data_bin, curr_byte, tag.len_val_type)
                 elif tag.number == self.TAG_NUM_NULL:
                     prop_content = None
+                elif tag.number == self.TAG_NUM_ENUMERATED:
+                    prop_content = self.parse_uint(data_bin, curr_byte, tag.len_val_type)
                 else:
                     print("WARN: Not implemented application tag: " + str(tag))
 
@@ -241,7 +264,7 @@ class Response:
 
         curr_byte += tag.len_val_type
 
-        return (prop_id, prop_content, curr_byte)
+        return (prop_id, prop_content, curr_byte, tag_open_prop_id)
 
     def parse_adr(self, data_bin, curr_byte, length):
         if length == 6 and len(data_bin[curr_byte:]) >= 6:
