@@ -380,7 +380,8 @@ class EncodingError(Exception):
 
     """
 
-    def __init__(self, prop_id, curr_byte, error):
+    # Make all but first argument optional to enable pickle
+    def __init__(self, prop_id, curr_byte=None, error=None):
         super(EncodingError, self).__init__("")
         self.prop_id = prop_id
         self.curr_byte = curr_byte
@@ -396,7 +397,8 @@ class BacError(Exception):
     Class for handling BACnet errors in responses.
     """
 
-    def __init__(self, err_class, err_code):
+    # Make all but first argument optional to enable pickle
+    def __init__(self, err_class, err_code=None):
         super(BacError, self).__init__("")
         self.err_class = err_class
         self.err_code = err_code
